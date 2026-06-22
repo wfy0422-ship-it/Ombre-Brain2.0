@@ -123,8 +123,8 @@ async def surface_default(max_results: int, max_tokens: int, tag_filter: list) -
     # --- 冷启动检测 ---
     cold_start = [
         b for b in unresolved
-        if int(b["metadata"].get("activation_count", 0)) == 0
-        and int(b["metadata"].get("importance", 0)) >= 8
+        if int(b["metadata"].get("activation_count") or 0) == 0
+        and int(b["metadata"].get("importance") or 0) >= 8
     ][:2]
     cold_start_ids = {b["id"] for b in cold_start}
     _ = pinned_ids  # suppress unused-var warning; used implicitly for logging only
@@ -231,8 +231,8 @@ async def surface_default(max_results: int, max_tokens: int, tag_filter: list) -
             if b["id"] in already:
                 continue
             meta = b["metadata"]
-            ac = int(meta.get("activation_count", 0))
-            imp = int(meta.get("importance", 0))
+            ac = int(meta.get("activation_count") or 0)
+            imp = int(meta.get("importance") or 0)
             cond_a = ac == 0 and imp >= 8
             cond_b = False
             if imp >= 9:
