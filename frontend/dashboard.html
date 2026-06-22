@@ -2299,7 +2299,7 @@ async function doSetup() {
   if (p1 !== p2) return showAuthError('两次密码不一致');
   const resp = await fetch('/auth/setup', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({password: p1}) });
   if (!resp.ok) {
-    const d = await resp.json();
+    const d = await resp.json().catch(() => ({}));
     return showAuthError(d.error || '设置失败');
   }
   // 可选：同时保存安全问题
@@ -2337,7 +2337,7 @@ async function doRecover() {
   if (resp.ok) {
     document.getElementById('auth-overlay').style.display = 'none';
   } else {
-    const d = await resp.json();
+    const d = await resp.json().catch(() => ({}));
     showAuthError(d.error || '验证失败');
   }
 }
@@ -2348,7 +2348,7 @@ async function doLogin() {
   if (resp.ok) {
     document.getElementById('auth-overlay').style.display = 'none';
   } else {
-    const d = await resp.json();
+    const d = await resp.json().catch(() => ({}));
     showAuthError(d.detail || '密码错误');
   }
 }
@@ -2378,7 +2378,7 @@ async function changePassword() {
     document.getElementById('settings-new-pwd').value = '';
     document.getElementById('settings-new-pwd2').value = '';
   } else {
-    const d = await resp.json();
+    const d = await resp.json().catch(() => ({}));
     msgEl.style.color = 'var(--negative)'; msgEl.textContent = d.detail || '修改失败';
   }
 }
@@ -2394,7 +2394,7 @@ async function saveSecurityQuestion() {
     msgEl.style.color = 'var(--accent)'; msgEl.textContent = '急救问题已保存';
     document.getElementById('settings-qa-a').value = '';
   } else {
-    const d = await resp.json();
+    const d = await resp.json().catch(() => ({}));
     msgEl.style.color = 'var(--negative)'; msgEl.textContent = d.error || '保存失败';
   }
 }
@@ -2728,7 +2728,7 @@ async function testSamplingBreath() {
   try {
     const resp = await authFetch('/api/breath?n=5');
     if (!resp) return;
-    const d = await resp.json();
+    const d = await readJsonSafe(resp);
     const items = (d.buckets || d.results || []).slice(0, 5);
     if (!items.length) {
       out.textContent = '没有候选桶（库可能是空的）';
@@ -2837,7 +2837,7 @@ async function toolTestBreath() {
   try {
     var resp = await authFetch('/api/breath?n=5');
     if (!resp) return;
-    var d = await resp.json();
+    var d = await readJsonSafe(resp);
     var items = (d.buckets || d.results || []).slice(0, 5);
     if (!items.length) { out.textContent = '没有候选桶（库可能是空的）'; return; }
     out.innerHTML = '<b style="color:var(--accent)">本次浮现：</b><br>' + items.map(function (b, i) {
