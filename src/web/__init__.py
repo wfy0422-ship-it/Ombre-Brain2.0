@@ -22,6 +22,7 @@ from . import meta
 from . import search
 from . import plans
 from . import letters
+from . import hooks
 
 
 def register_all(mcp) -> None:
@@ -35,3 +36,4 @@ def register_all(mcp) -> None:
     search.register(mcp)
     plans.register(mcp)
     letters.register(mcp)
+    hooks.register(mcp)
