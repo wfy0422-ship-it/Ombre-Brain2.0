@@ -52,7 +52,7 @@ async def surface_search(
     try:
         matches = await rt.bucket_mgr.search(
             query,
-            limit=max(max_results, 20),
+            limit=max(max_results, 5),
             domain_filter=domain_filter,
             query_valence=q_valence,
             query_arousal=q_arousal,
@@ -67,7 +67,7 @@ async def surface_search(
     # --- 向量通道 ---
     matched_ids = {b["id"] for b in matches}
     try:
-        vector_results = await rt.embedding_engine.search_similar(query, top_k=max(max_results, 20))
+        vector_results = await rt.embedding_engine.search_similar(query, top_k=max(max_results, 5))
         for bucket_id, sim_score in vector_results:
             if bucket_id not in matched_ids and sim_score > 0.65:
                 bucket = await rt.bucket_mgr.get(bucket_id)
