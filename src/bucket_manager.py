@@ -32,7 +32,7 @@ import math
 import logging
 import shutil
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # 统一错误体系：越界 clamp 时上报 OB-W001/OB-W002（rule.md §11）
 try:
@@ -341,7 +341,8 @@ class BucketManager:
             bucket_id = generate_bucket_id()
         # 桶名 = "YYYY-MM-DD HH-MM-SS [LLM生成的标题]"，无标题时仅用时间戳。
         # 使用连字符替代冒号，避免 sanitize_name 后续编辑时把冒号去掉破坏可读性。
-        _ts = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
+        tz = timezone(timedelta(hours=8))
+        _ts = datetime.now(tz).strftime("%Y-%m-%d %H-%M-%S")
         _clean = sanitize_name(name) if name else ""
         bucket_name = (f"{_ts} {_clean}" if (_clean and _clean != "unnamed") else _ts)[:80]
         # feel buckets are allowed to have empty domain; others default to ["未分类"]
