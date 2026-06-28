@@ -6,7 +6,7 @@ import logging
 from starlette.routing import Route
 from starlette.responses import JSONResponse
 from starlette.requests import Request
-from web._shared import require_auth
+from web._shared import _require_auth as require_auth
 
 from tools import (
     hold as _t_hold,
