@@ -1,13 +1,10 @@
 """
 薄网关：让 Node.js 中间层通过 /api/tool 调用 MCP 工具
-只做三件事：鉴权、参数校验、调 dispatch
+使用 @mcp.custom_route 注册，无需手动获取 _app
 """
 import logging
-from starlette.routing import Route
 from starlette.responses import JSONResponse
 from starlette.requests import Request
-
-# 导入鉴权函数（注意：它是函数，不是装饰器）
 from web._shared import _require_auth
 
 from tools import (
@@ -38,42 +35,39 @@ TOOL_MAP = {
     "grow": _t_grow.dispatch,
 }
 
-async def _api_tool(request: Request):
-    # ----- 手动鉴权（因为 _require_auth 不是装饰器）-----
-    auth_resp = _require_auth(request)
-    if auth_resp is not None:
-        # 鉴权失败，直接返回 401/403 响应
-        return auth_resp
-
-    # ----- 解析参数 -----
-    try:
-        body = await request.json()
-    except:
-        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
-
-    name = body.get("name") or body.get("tool")
-    args = body.get("arguments") or body.get("args") or {}
-
-    if not name:
-        return JSONResponse({"error": "Missing 'name'"}, status_code=400)
-
-    if name not in TOOL_MAP:
-        return JSONResponse({"error": f"Unknown tool: {name}"}, status_code=400)
-
-    logger.info(f"[tool] 调用 {name}, args: {list(args.keys())}")
-
-    func = TOOL_MAP[name]
-    try:
-        result = await func(**args)
-    except Exception as e:
-        logger.error(f"[tool] {name} 执行失败: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-    return JSONResponse({"result": result})
-
 def register(mcp):
-    app = getattr(mcp, "_app", None) or getattr(mcp, "app", None)
-    if app is None:
-        raise RuntimeError("无法获取 MCP app")
-    app.routes.append(Route("/api/tool", _api_tool, methods=["POST"]))
-    print("✅ [tool_gateway] /api/tool 已挂载")
+    # 使用 custom_route 装饰器，不用手动获取 app
+    @mcp.custom_route("/api/tool", methods=["POST"])
+    async def _api_tool(request: Request):
+        # 鉴权
+        auth_resp = _require_auth(request)
+        if auth_resp is not None:
+            return auth_resp
+
+        # 解析 JSON
+        try:
+            body = await request.json()
+        except:
+            return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+        name = body.get("name") or body.get("tool")
+        args = body.get("arguments") or body.get("args") or {}
+
+        if not name:
+            return JSONResponse({"error": "Missing 'name'"}, status_code=400)
+
+        if name not in TOOL_MAP:
+            return JSONResponse({"error": f"Unknown tool: {name}"}, status_code=400)
+
+        logger.info(f"[tool] 调用 {name}, args: {list(args.keys())}")
+
+        func = TOOL_MAP[name]
+        try:
+            result = await func(**args)
+        except Exception as e:
+            logger.error(f"[tool] {name} 执行失败: {e}")
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+        return JSONResponse({"result": result})
+
+    print("✅ [tool_gateway] /api/tool 已通过 custom_route 挂载")
