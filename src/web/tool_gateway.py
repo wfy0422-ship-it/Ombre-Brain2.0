@@ -6,7 +6,9 @@ import logging
 from starlette.routing import Route
 from starlette.responses import JSONResponse
 from starlette.requests import Request
-from web._shared import _require_auth as require_auth
+
+# 导入鉴权函数（注意：它是函数，不是装饰器）
+from web._shared import _require_auth
 
 from tools import (
     hold as _t_hold,
@@ -36,8 +38,14 @@ TOOL_MAP = {
     "grow": _t_grow.dispatch,
 }
 
-@require_auth
 async def _api_tool(request: Request):
+    # ----- 手动鉴权（因为 _require_auth 不是装饰器）-----
+    auth_resp = _require_auth(request)
+    if auth_resp is not None:
+        # 鉴权失败，直接返回 401/403 响应
+        return auth_resp
+
+    # ----- 解析参数 -----
     try:
         body = await request.json()
     except:
@@ -49,8 +57,9 @@ async def _api_tool(request: Request):
     if not name:
         return JSONResponse({"error": "Missing 'name'"}, status_code=400)
 
-    # 断言 + 日志（方便未来排错）
-    assert name in TOOL_MAP, f"未知工具: {name}"
+    if name not in TOOL_MAP:
+        return JSONResponse({"error": f"Unknown tool: {name}"}, status_code=400)
+
     logger.info(f"[tool] 调用 {name}, args: {list(args.keys())}")
 
     func = TOOL_MAP[name]
