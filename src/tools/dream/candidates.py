@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 
 from .. import _runtime as rt
 
-DREAM_MAX_CANDIDATES = 40
+DREAM_MAX_CANDIDATES = 10
 
 
 def collect_candidates(all_buckets: list, window_hours: int) -> list:
