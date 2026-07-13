@@ -30,12 +30,11 @@ from . import github
 from . import embedding
 from . import ollama_local
 from . import config_api
-<<<<<<< HEAD
-from . import tool_gateway   # ← 新增这一行
-=======
-from . import v3_debug
+from . import tool_gateway    # ← 你的自定义网关
+from . import v3_debug        # ← upstream 新增
 
 
+# 按域列出所有已迁移的路由模块（注册顺序由元组顺序决定）
 _WEB_MODULES = (
     ("web.auth", auth.register),
     ("web.tunnel", tunnel.register),
@@ -54,31 +53,12 @@ _WEB_MODULES = (
     ("web.ollama_local", ollama_local.register),
     ("web.config_api", config_api.register),
     ("web.v3_debug", v3_debug.register),
+    ("web.tool_gateway", tool_gateway.register),   # ← 加入你的网关
 )
->>>>>>> upstream/main
 
 
 def register_all(mcp) -> None:
     """注册所有已迁移到 web/ 的路由模块。后续每迁一个模块加一行。"""
-<<<<<<< HEAD
-    auth.register(mcp)
-    tunnel.register(mcp)
-    oauth.register(mcp)
-    dashboard.register(mcp)
-    system.register(mcp)
-    meta.register(mcp)
-    search.register(mcp)
-    plans.register(mcp)
-    letters.register(mcp)
-    hooks.register(mcp)
-    buckets.register(mcp)
-    import_api.register(mcp)
-    github.register(mcp)
-    embedding.register(mcp)
-    ollama_local.register(mcp)
-    config_api.register(mcp)
-    tool_gateway.register(mcp)   # ← 新增这一行
-=======
     def _register():
         for _name, register in _WEB_MODULES:
             register(mcp)
@@ -89,4 +69,3 @@ def register_all(mcp) -> None:
         _register,
         module="web.*",
     )
->>>>>>> upstream/main
