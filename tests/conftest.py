@@ -9,12 +9,9 @@
 
 import os
 import sys
-import math
 import pytest
-import asyncio
-from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 # ------------------------------------------------------------
 # iter 1.8: 必须在任何 src/* 导入之前设置 OMBRE_BUCKETS_DIR
@@ -125,10 +122,42 @@ def buggy_config(tmp_path):
     }
 
 
+class FakeEmbeddingEngine:
+    """最小化可用的 embedding 引擎替身。
+
+    Markdown 是写入真源，embedding 是可重建的派生索引。大多数测试要验证
+    评分/衰减/检索等逻辑，所以默认 bucket_mgr fixture 配一个永远成功的
+    fake；离线写入与后台重试契约在 test_embedding_outbox.py 单独覆盖。
+    """
+
+    enabled = True
+
+    def __init__(self):
+        self._store: dict[str, list[float]] = {}
+
+    async def generate_and_store(self, bucket_id: str, content: str) -> bool:
+        self._store[bucket_id] = [0.1, 0.2, 0.3]
+        return True
+
+    def delete_embedding(self, bucket_id: str) -> None:
+        self._store.pop(bucket_id, None)
+
+    async def get_embedding(self, bucket_id: str) -> list[float] | None:
+        return self._store.get(bucket_id)
+
+    async def search_similar(self, query: str, top_k: int = 10) -> list[tuple[str, float]]:
+        return []
+
+
 @pytest.fixture
-def bucket_mgr(test_config):
+def fake_embedding_engine():
+    return FakeEmbeddingEngine()
+
+
+@pytest.fixture
+def bucket_mgr(test_config, fake_embedding_engine):
     from bucket_manager import BucketManager
-    return BucketManager(test_config)
+    return BucketManager(test_config, embedding_engine=fake_embedding_engine)
 
 
 @pytest.fixture

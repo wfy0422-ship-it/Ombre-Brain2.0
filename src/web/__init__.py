@@ -13,6 +13,7 @@ web/ — Dashboard / HTTP 路由层（从 server.py 巨石文件拆出，镜像 
 ========================================
 """
 
+from . import _shared
 from . import auth
 from . import tunnel
 from . import oauth
@@ -29,11 +30,37 @@ from . import github
 from . import embedding
 from . import ollama_local
 from . import config_api
+<<<<<<< HEAD
 from . import tool_gateway   # ← 新增这一行
+=======
+from . import v3_debug
+
+
+_WEB_MODULES = (
+    ("web.auth", auth.register),
+    ("web.tunnel", tunnel.register),
+    ("web.oauth", oauth.register),
+    ("web.dashboard", dashboard.register),
+    ("web.system", system.register),
+    ("web.meta", meta.register),
+    ("web.search", search.register),
+    ("web.plans", plans.register),
+    ("web.letters", letters.register),
+    ("web.hooks", hooks.register),
+    ("web.buckets", buckets.register),
+    ("web.import_api", import_api.register),
+    ("web.github", github.register),
+    ("web.embedding", embedding.register),
+    ("web.ollama_local", ollama_local.register),
+    ("web.config_api", config_api.register),
+    ("web.v3_debug", v3_debug.register),
+)
+>>>>>>> upstream/main
 
 
 def register_all(mcp) -> None:
     """注册所有已迁移到 web/ 的路由模块。后续每迁一个模块加一行。"""
+<<<<<<< HEAD
     auth.register(mcp)
     tunnel.register(mcp)
     oauth.register(mcp)
@@ -51,3 +78,15 @@ def register_all(mcp) -> None:
     ollama_local.register(mcp)
     config_api.register(mcp)
     tool_gateway.register(mcp)   # ← 新增这一行
+=======
+    def _register():
+        for _name, register in _WEB_MODULES:
+            register(mcp)
+
+    return _shared.run_v3_web_operation(
+        "register_all",
+        {"modules": [name for name, _register_fn in _WEB_MODULES]},
+        _register,
+        module="web.*",
+    )
+>>>>>>> upstream/main

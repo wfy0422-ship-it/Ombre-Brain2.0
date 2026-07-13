@@ -29,7 +29,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from utils import count_tokens_approx, now_iso
+from utils import clean_llm_json, count_tokens_approx, now_iso, parse_bool
 
 logger = logging.getLogger("ombre_brain.import")
 
@@ -106,11 +106,8 @@ def _clamp_importance(meta: dict) -> int:
 
 
 def _strip_md_fence(raw: str) -> str:
-    """剥掉 LLM 偊尔会包的 ```...``` 代码块外壳（与 dehydrator 内部同款）。"""
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[-1].rsplit("```", 1)[0]
-    return cleaned
+    """Backwards-compatible wrapper for tolerant LLM JSON extraction."""
+    return clean_llm_json(raw)
 
 
 # ============================================================
@@ -348,6 +345,97 @@ def chunk_turns(turns: list[dict], target_tokens: int = _CHUNK_TARGET_TOKENS, hu
         })
 
     return chunks
+
+
+def _detect_preview_format(raw_content: str, filename: str, warnings: list[str]) -> str:
+    ext = Path(filename).suffix.lower() if filename else ""
+    stripped = raw_content.strip()
+
+    if ext == ".md":
+        return "markdown"
+    if ext in (".txt", ".jsonl"):
+        return "text"
+
+    if ext == ".json" or stripped.startswith(("{", "[")):
+        try:
+            data = json.loads(stripped)
+            sample = data[0] if isinstance(data, list) and data else data
+            if isinstance(sample, dict):
+                if "chat_messages" in sample:
+                    return "claude_json"
+                if "mapping" in sample:
+                    return "chatgpt_json"
+                if "messages" in sample:
+                    return "chat_json"
+                if "role" in sample and "content" in sample:
+                    return "chat_json"
+            return "json"
+        except (json.JSONDecodeError, TypeError, IndexError):
+            warnings.append("JSON 解析失败，已按纯文本继续预检")
+            return "text"
+
+    return "markdown" if "\n" in raw_content else "text"
+
+
+def preview_import(raw_content: str, filename: str = "", human_label: str = "用户") -> dict[str, Any]:
+    """Return a local-only preview of an import file without mutating state."""
+    warnings: list[str] = []
+    if not raw_content or not raw_content.strip():
+        return {
+            "ok": False,
+            "error": "Empty file",
+            "detected_format": "",
+            "turns_count": 0,
+            "chunks_count": 0,
+            "estimated_api_calls": 0,
+            "warnings": ["文件为空"],
+        }
+
+    detected_format = _detect_preview_format(raw_content, filename, warnings)
+    turns = detect_and_parse(raw_content, filename)
+    if not turns:
+        return {
+            "ok": False,
+            "error": "No conversation turns found",
+            "detected_format": detected_format,
+            "turns_count": 0,
+            "chunks_count": 0,
+            "estimated_api_calls": 0,
+            "warnings": warnings,
+        }
+
+    chunks = chunk_turns(turns, human_label=human_label)
+    if not chunks:
+        return {
+            "ok": False,
+            "error": "No processable chunks after splitting",
+            "detected_format": detected_format,
+            "turns_count": len(turns),
+            "chunks_count": 0,
+            "estimated_api_calls": 0,
+            "warnings": warnings,
+        }
+
+    token_estimate = sum(count_tokens_approx(chunk.get("content", "")) for chunk in chunks)
+    first_preview = chunks[0].get("content", "")[:600]
+    return {
+        "ok": True,
+        "detected_format": detected_format,
+        "turns_count": len(turns),
+        "chunks_count": len(chunks),
+        "estimated_api_calls": len(chunks),
+        "estimated_tokens": token_estimate,
+        "warnings": warnings,
+        "first_chunk_preview": first_preview,
+        "sample_turns": [
+            {
+                "role": str(turn.get("role", "")),
+                "content": str(turn.get("content", ""))[:160],
+                "timestamp": str(turn.get("timestamp", "")),
+            }
+            for turn in turns[:3]
+        ],
+    }
 
 
 # ============================================================
@@ -632,7 +720,7 @@ class ImportEngine:
 
                 if should_preserve:
                     # Raw mode: store original content without summarization
-                    bucket_id = await self.bucket_mgr.create(
+                    await self.bucket_mgr.create(
                         content=item["content"],
                         tags=item.get("tags", []),
                         importance=item.get("importance", _DEFAULT_IMPORTANCE),
@@ -641,7 +729,6 @@ class ImportEngine:
                         arousal=item.get("arousal", _DEFAULT_AROUSAL),
                         name=item.get("name"),
                     )
-                    await self._safe_embed(bucket_id, item["content"])
                     self.state.data["memories_raw"] += 1
                     self.state.data["memories_created"] += 1
                 else:
@@ -709,26 +796,15 @@ class ImportEngine:
                 "arousal": arousal,
                 "tags": [str(t) for t in item.get("tags", [])][:_TAGS_MAX],
                 "importance": importance,
-                "preserve_raw": bool(item.get("preserve_raw", False)),
-                "is_pattern": bool(item.get("is_pattern", False)),
+                "preserve_raw": parse_bool(
+                    item.get("preserve_raw", False), default=False
+                ),
+                "is_pattern": parse_bool(
+                    item.get("is_pattern", False), default=False
+                ),
             })
 
         return validated
-
-    async def _safe_embed(self, bucket_id: str, content: str) -> None:
-        """Fire-and-forget embedding：失败静默，不中断导入主流程。
-
-        4 处需要生成 embedding 的地方都走这个 helper，避免重复的
-        try/except Exception: pass 样板。
-        """
-        if not self.embedding_engine:
-            return
-        try:
-            await self.embedding_engine.generate_and_store(bucket_id, content)
-        except Exception as e:
-            # 降级允许：embedding 失败不影响桶落盘；后续可通过 backfill_embeddings.py 补全。
-            # 参见 rule.md §2.4 / §6 OB-E001。
-            logger.warning(f"_safe_embed: bucket={bucket_id} embedding 生成失败（允许降级）: {e}")
 
     async def _merge_or_create_item(self, item: dict) -> bool:
         """Try to merge with existing bucket, or create new. Returns is_merged."""
@@ -768,14 +844,13 @@ class ImportEngine:
                         valence=round((old_v + valence) / 2, 2),
                         arousal=round((old_a + arousal) / 2, 2),
                     )
-                    await self._safe_embed(bucket["id"], merged)
                     return True
                 except Exception as e:
                     logger.warning(f"Merge failed during import: {e}")
                     self.state.data["api_calls"] += 1
 
         # Create new
-        bucket_id = await self.bucket_mgr.create(
+        await self.bucket_mgr.create(
             content=content,
             tags=tags,
             importance=importance,
@@ -784,7 +859,6 @@ class ImportEngine:
             arousal=arousal,
             name=name or None,
         )
-        await self._safe_embed(bucket_id, content)
         return False
 
     async def detect_patterns(self) -> list[dict]:

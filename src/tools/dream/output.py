@@ -33,7 +33,22 @@ def format_dream_output(
     window_hours: int,
     connection_hint: str,
     crystal_hint: str,
+    core_context: list | None = None,
 ) -> str:
+    def _miss_lines(meta: dict) -> str:
+        # Miss: meaning 逐条原样展示，不压缩/不改写；media 只给 path/title 元数据。
+        lines = []
+        for item in meta.get("meaning") or []:
+            if item:
+                lines.append(f"💭 meaning: {item}")
+        for m in meta.get("media") or []:
+            if not isinstance(m, dict) or not m.get("path"):
+                continue
+            title = m.get("title")
+            label = f"（{title}）" if title and title != m.get("path") else ""
+            lines.append(f"🖼️ media: {m['path']}{label}")
+        return ("\n" + "\n".join(lines)) if lines else ""
+
     parts = []
     for b in recent:
         meta = b["metadata"]
@@ -47,7 +62,8 @@ def format_dream_output(
             f"[{meta.get('name', b['id'])}]{resolved_tag} "
             f"主题:{domains} V{val:.1f}/A{aro:.1f} "
             f"创建:{created} 最近活跃:{last_active}\n"
-            f"ID: {b['id']}\n"
+            f"ID: {b['id']}"
+            f"{_miss_lines(meta)}\n"
             f"{strip_wikilinks(b['content'])}"
         )
 
@@ -63,7 +79,27 @@ def format_dream_output(
         "没有沉淀就不写，不强迫产出。\n"
     )
 
-    final_text = header + "\n---\n".join(parts) + connection_hint + crystal_hint
+    final_text = header + "\n---\n".join(parts)
+
+    core_context = core_context or []
+    if core_context:
+        core_lines = []
+        for b in core_context:
+            meta = b["metadata"]
+            domains = ",".join(meta.get("domain", []))
+            core_lines.append(
+                f"📌 [{b['id']}] {meta.get('name', b['id'])} "
+                f"主题:{domains or '未分类'} 重要:{meta.get('importance', '?')}"
+                f"{_miss_lines(meta)}\n"
+                f"{strip_wikilinks(b['content']).strip()}"
+            )
+        final_text += (
+            "\n\n=== 核心准则参考 ===\n"
+            "这些是 pinned/permanent 桶，只作为梦里的边界与背景，不当作普通待消化事项。\n\n"
+            + "\n---\n".join(core_lines)
+        )
+
+    final_text += connection_hint + crystal_hint
 
     # --- active plan 段 ---
     try:

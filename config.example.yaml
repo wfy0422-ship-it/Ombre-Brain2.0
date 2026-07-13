@@ -48,6 +48,11 @@ hooks:
 # 保持默认则使用内置的 ./buckets/ 目录
 # buckets_dir: "/path/to/your/Obsidian Vault/Ombre Brain"
 
+# Detect Markdown changes made outside OB (Obsidian / Git / manual edits).
+# Only file metadata is polled; Markdown is reparsed when a change is detected.
+storage:
+  external_change_poll_seconds: 1.0  # 0 = check every list; env: OMBRE_EXTERNAL_CHANGE_POLL_SECONDS
+
 # --- Merge threshold / 桶合并阈值 ---
 # When storing a new memory, if similarity with an existing bucket exceeds
 # this value (0-100), merge instead of creating a new one
@@ -75,6 +80,7 @@ dehydration:
   # api_key: ""    # ⚠️ Use env var OMBRE_COMPRESS_API_KEY instead / 请使用环境变量 OMBRE_COMPRESS_API_KEY
   max_tokens: 1024
   temperature: 0.1
+  timeout_seconds: 120             # LLM request timeout seconds / LLM 请求超时秒数
 
 # --- Decay parameters / 记忆衰减参数 ---
 # Simulates Ebbinghaus forgetting curve, auto-archives inactive memories
@@ -92,9 +98,16 @@ decay:
 # 需要在环境变量中设置 OMBRE_EMBED_API_KEY。
 embedding:
   enabled: true                   # Enable embedding / 启用向量化
+  background_indexing: true       # Write Markdown first; index asynchronously / 先落盘，后台生成向量
+  retry_base_seconds: 5           # First retry delay after provider failure / 首次重试等待
+  retry_max_seconds: 300          # Exponential-backoff ceiling / 指数退避上限
+  circuit_failure_threshold: 3    # Consecutive failures before global pause / 连续失败几次后熔断
+  circuit_base_seconds: 30        # First global cooldown / 首次熔断冷却
+  circuit_max_seconds: 600        # Maximum global cooldown / 最长熔断冷却
   backend: "api"                  # 只支持 api（OpenAI 兼容端点）
   model: "gemini-embedding-001"   # 云端模型名（如 gemini-embedding-001）
   base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+  timeout_seconds: 120             # Embedding request timeout seconds / 向量化请求超时秒数
   # api_key: ""                   # Use OMBRE_EMBED_API_KEY / 使用 OMBRE_EMBED_API_KEY
 
 # --- Scoring weights / 检索权重参数 ---
@@ -111,9 +124,9 @@ matching:
   max_results: 5                  # Max results per search / 单次搜索最多返回条数
 
 # --- Surfacing defaults / 浮现默认参数 ---
-# Defaults applied when Claude calls breath() without explicit caps.
+# Defaults applied when the AI calls breath() without explicit caps.
 # Front-end Settings panel writes the same fields back here.
-# Claude 调用 breath() 不显式传 max_* 时使用这些默认；前端「浮现默认参数」面板会回写到这里。
+# AI 调用 breath() 不显式传 max_* 时使用这些默认；前端「浮现默认参数」面板会回写到这里。
 surfacing:
   breath_max_results: 20          # 1-50, hard cap of buckets returned per breath
   breath_max_tokens: 10000        # 500-20000, total token cap per breath
@@ -133,6 +146,13 @@ surfacing:
 # 单桶字节上限 + pinned 桶数量上限。超出时在 hold/grow/trace 入口直接拒绝。
 limits:
   max_bucket_bytes: 51200         # 50KB; 0 disables check
+  max_import_upload_bytes: 67108864  # 64MB conversation import request cap
+  max_mcp_request_bytes: 4194304  # 4MB HTTP body cap for /mcp; 0 disables
+  max_management_request_bytes: 4194304  # 4MB cap for Dashboard/OAuth mutations; large import routes use their own caps
+  max_grow_input_bytes: 2097152   # 2MB total grow source/items cap; 0 disables
+  max_query_bytes: 16384          # 16KB breath/letter query cap; 0 disables
+  max_metadata_bytes: 16384       # combined tool metadata/filter cap; 0 disables
+  max_grow_items: 100             # pre-split/digest item count cap; 0 disables
   max_pinned: 20                  # max pinned buckets; 0 disables check
 
 # --- iter 1.9 G: 桶类型默认值 / per-type frontmatter defaults ---
@@ -146,12 +166,6 @@ bucket_type_defaults:
   plan:
     weight: 0.5
 
-# --- Obsidian wikilinks / Obsidian 双链自动注入 ---
-wikilink:
-  enabled: true
-  use_tags: false
-  use_domain: true
-  use_auto_keywords: true
-  auto_top_k: 4
-  min_keyword_len: 3
-  exclude_keywords: []
+# --- Deprecated: Obsidian wikilinks auto injection / 已废弃 ---
+# wikilink 自动注入已禁用；OB 只读取正文里的 [[wikilink]] 做网络图。
+# 旧版 config.yaml 中残留的 wikilink.* 配置会被忽略。
